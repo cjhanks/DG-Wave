@@ -5,6 +5,7 @@ from flask import (
         Flask,
         request,
         jsonify,
+        Response,
         )
 import db
 from parser import (
@@ -15,7 +16,6 @@ from parser import (
 # {
 # Install the app
 app = Flask('deepgram')
-#app.install(db.init_plugin())
 # }
 
 
@@ -35,6 +35,47 @@ def handle_invalid_usage(error):
 
 # ----
 
+@app.route('/')
+def form():
+    content = '''
+<html>
+<body>
+<h1>DG</h1>
+<hr>
+</br>
+<form action="post" method="post" enctype="multipart/form-data">
+  <input type="file" name="file_upload"></input>
+  </br>
+  <input type="submit" value="Upload Wave File" name="submit">
+  </br>
+</form>
+<hr>
+<form action="list" method="get" enctype="multipart/form-data">
+  MinDuration: <input type="text" name="minduration"></input>
+  </br>
+  <input type="submit" value="List files" name="submit">
+  </br>
+</form>
+<hr>
+<form action="info" method="get" enctype="multipart/form-data">
+  Name: <input type="text" name="name"></input>
+  </br>
+  <input type="submit" value="Info" name="submit">
+  </br>
+</form>
+<hr>
+<form action="download" method="get" enctype="multipart/form-data">
+  Name: <input type="text" name="name"></input>
+  </br>
+  <input type="submit" value="Download" name="submit">
+  </br>
+</form>
+</body>
+
+
+</html>
+'''
+    return content
 
 @app.route('/post', methods=['POST'])
 @db.inject_db
@@ -82,7 +123,11 @@ def get_wave(cnct):
     except Exception:
         raise HttpError(404, 'No such file found')
 
-    return zlib.decompress(item.data)
+    return Response(
+            zlib.decompress(item.data),
+            mimetype='audio/wave',
+            headers={'Content-Disposition':
+                        'attachment; filename=%s' % item.name})
 
 
 # --
@@ -98,7 +143,10 @@ class QueryMaxDuration(QueryOptions):
     Name = 'maxduration'
 
     def __init__(self, value):
-        self.value = float(value)
+        if value:
+            self.value = float(value)
+        else:
+            self.value = float('inf')
 
     def augment(self, query):
         return query.filter(db.AudioFile.runtime_sec < self.value)
@@ -107,7 +155,10 @@ class QueryMaxDuration(QueryOptions):
     Name = 'minduration'
 
     def __init__(self, value):
-        self.value = float(value)
+        if value:
+            self.value = float(value)
+        else:
+            self.value = 0
 
     def augment(self, query):
         return query.filter(db.AudioFile.runtime_sec > self.value)
