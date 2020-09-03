@@ -4,42 +4,8 @@ from collections import namedtuple
 import zlib
 
 
-class WaveFileFormatCode(enum.Enum):
-    """
-    There are more available WAVE format tags, we will only support the first
-    four.
-    """
-    WAVE_FORMAT_PCM        = 0x0001
-    WAVE_FORMAT_IEEE_FLOAT = 0x0003
-    WAVE_FORMAT_ALAW       = 0x0006
-    WAVE_FORMAT_MULAW      = 0x0007
-    WAVE_FORMAT_EXTENSIBLE = 0xFFFE
-
-
-class WaveChannelMask(enum.Enum):
-    SPEAKER_FRONT_LEFT            = 0x1
-    SPEAKER_FRONT_RIGHT           = 0x2
-    SPEAKER_FRONT_CENTER          = 0x4
-    SPEAKER_LOW_FREQUENCY         = 0x8
-    SPEAKER_BACK_LEFT             = 0x10
-    SPEAKER_BACK_RIGHT            = 0x20
-    SPEAKER_FRONT_LEFT_OF_CENTER  = 0x40
-    SPEAKER_FRONT_RIGHT_OF_CENTER = 0x80
-    SPEAKER_BACK_CENTER           = 0x100
-    SPEAKER_SIDE_LEFT             = 0x200
-    SPEAKER_SIDE_RIGHT            = 0x400
-    SPEAKER_TOP_CENTER            = 0x800
-    SPEAKER_TOP_FRONT_LEFT        = 0x1000
-    SPEAKER_TOP_FRONT_CENTER      = 0x2000
-    SPEAKER_TOP_FRONT_RIGHT       = 0x4000
-    SPEAKER_TOP_BACK_LEFT         = 0x8000
-    SPEAKER_TOP_BACK_CENTER       = 0x10000
-    SPEAKER_TOP_BACK_RIGHT        = 0x20000
-
-
 class WaveException(RuntimeError):
     pass
-
 
 WaveHeader = \
     namedtuple('WaveHeader', ['chunk_id', 'chunk_size', 'wave_id'])
@@ -63,16 +29,17 @@ class WaveParser:
     Format = ['H', 'H', 'I', 'I', 'H', 'H', 'H', 'H', 'I16s']
 
     def __init__(self, fp):
-        self.fp = fp
-        self.read_size = 0
+        self.__fp = fp
+        self.__read_size = 0
         self.header = None
         self.format = None
-        self.compressor = zlib.compressobj()
+        self.__compressor = zlib.compressobj()
+        self.__data = b''
 
     def read(self, size):
-        data = self.fp.read(size)
-        self.read_size += len(data)
-        self.compressor.compress(data)
+        data = self.__fp.read(size)
+        self.__read_size += len(data)
+        self.__data += self.__compressor.compress(data)
 
         return data
 
@@ -94,7 +61,7 @@ class WaveParser:
             # The specification for WAVE is as diverse as the day is long,
             # not even Python implements a full featured WAVE parser, so
             # I won't here, either.  We will only consider the important
-            # part.
+            # parts.
             if   data == b'FMT ':
                 self.format = self.__parse_format()
             elif data == b'DATA':
@@ -103,7 +70,15 @@ class WaveParser:
                 # Read until the end.
                 self.read(None)
 
-        return self.compressor.flush()
+        if self.header is None or self.format is None:
+            raise WaveException('Invalid WAVE file')
+
+        return self.__get_data()
+
+    def __get_data(self):
+        ret = self.__data + self.__compressor.flush()
+        del self.__data
+        return ret
 
     def __parse_header(self):
         size = struct.calcsize(WaveParser.Header)
@@ -143,7 +118,7 @@ class WaveParser:
         size = struct.unpack('I', data)[0]
         self.data_size = size
 
-        # Consume it
+        # Consume the data.
         data = self.read(size)
         if size != len(data):
             raise WaveException('Truncated WAVE file')

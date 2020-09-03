@@ -1,5 +1,5 @@
 import enum
-from bottle.ext import sqlalchemy as bottle_sqlalchemy
+from functools import wraps
 from json import dumps
 from sqlalchemy import (
         create_engine,
@@ -10,10 +10,13 @@ from sqlalchemy import (
         Sequence,
         String,
     )
+from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm.session import (
+        sessionmaker,
+    )
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
-engine = create_engine('sqlite:///:memory:', echo=False)
 
 
 def tuple_to_json(t):
@@ -23,6 +26,13 @@ def tuple_to_json(t):
             val = val.decode()
         ret[key] = val
     return dumps(ret)
+
+
+def inject_db(func):
+    @wraps(func)
+    def __func__(*args, **kwargs):
+        return func(*args, cnct=Session(), **kwargs)
+    return __func__
 
 class AudioFile(Base):
     __tablename__ = 'audio_file'
@@ -52,6 +62,7 @@ class AudioFile(Base):
         af = AudioFile()
         af.name = name
         af.data = parser.parse()
+
         af.size = len(af.data)
         af.channels = parser.format.channels
         af.bitwidth = parser.format.bits_per_sample
@@ -80,14 +91,10 @@ class AudioFile(Base):
             ret[col] = getattr(self, col)
         return ret
 
-
-def init_plugin():
-    plugin = bottle_sqlalchemy.Plugin(
-            engine,
-            Base.metadata,
-            keyword='db',
-            create=True,
-            commit=True,
-            use_kwargs=False)
-    return plugin
-
+engine = create_engine(
+        'sqlite:///:memory:',
+        echo=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool)
+Base.metadata.create_all(engine)
+Session = sessionmaker(bind=engine, autoflush=True)
