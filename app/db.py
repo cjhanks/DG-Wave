@@ -27,7 +27,6 @@ def tuple_to_json(t):
         ret[key] = val
     return dumps(ret)
 
-
 def inject_db(func):
     @wraps(func)
     def __func__(*args, **kwargs):
