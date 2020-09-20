@@ -1,3 +1,4 @@
+from io import BytesIO
 from uuid import uuid4
 import zlib
 import flask
@@ -12,6 +13,7 @@ from parser import (
         WaveException,
         WaveParser,
         )
+from sqlalchemy.sql.expression import func, select
 
 # {
 # Install the app
@@ -197,5 +199,17 @@ def info_wave(cnct):
         raise HttpError(404, 'No such file found')
 
     return item.info
+
+@app.route('/random')
+@db.inject_db
+def random_segment(cnct):
+    audio_file = cnct.query(db.AudioFile).order_by(func.random()).first()
+    audio_data = BytesIO(zlib.decompress(audio_file.data))
+    audio_parsed = WaveParser(audio_data)
+    print(audio_parsed.header)
+    print(audio_parsed.format)
+    print(audio_parsed.pcm_data)
+
+    pass
 
 app.run()
