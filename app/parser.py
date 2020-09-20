@@ -35,6 +35,7 @@ class WaveParser:
         self.format = None
         self.__compressor = zlib.compressobj()
         self.__data = b''
+        self.pcm_data = None
 
     def read(self, size):
         data = self.__fp.read(size)
@@ -68,7 +69,7 @@ class WaveParser:
                 self.__parse_data()
             else:
                 # Read until the end.
-                self.read(None)
+                self.pcm_data = self.read(None)
 
         if self.header is None or self.format is None:
             raise WaveException('Invalid WAVE file')
